@@ -1,0 +1,10 @@
+.env
+.venv/
+.vscode/
+lab*/labs-alunos*/
+lab*/src/__pycache__/
+lab*/testcases/*/
+!lab*/testcases/exemplo-classroom/**
+lab*/*.xlsx
+lab*/**/a.out
+lab*/**/logs_correcao*.txt
