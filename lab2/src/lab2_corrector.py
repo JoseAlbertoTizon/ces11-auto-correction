@@ -40,7 +40,7 @@ class FailedTestcaseError(CorrectionFailed):
         super().__init__(corrector, "ERRO-CASOS-TESTE", message)
 
 class Lab2Corrector():
-    def __init__(self, alunos_path, testcases_path, sheet_path, numero_lab, use_ai, aluno=None):
+    def __init__(self, alunos_path, testcases_path, numero_lab, use_ai, aluno=None):
         self.alunos_path = alunos_path
         self.remove_error_type_txts()
         self.create_student_folders()
@@ -49,7 +49,6 @@ class Lab2Corrector():
         else:
             self.alunos_list = [aluno]
         self.testcases_path = testcases_path
-        self.sheet_path = sheet_path
         self.numero_lab = numero_lab
         self.use_ai = use_ai
         self.aluno = aluno
@@ -200,8 +199,6 @@ class Lab2Corrector():
             response = self.do_ai_correction(aluno_path, code)
             json_str = "\n".join(response)
             response_dict = json.loads(json_str)
-            self.add_corrections_to_sheet(aluno_row, response_dict)
-
         
     def correct_output(self, aluno_path, testcase):
         self.run_student_code(aluno_path, testcase)
@@ -313,77 +310,6 @@ class Lab2Corrector():
         self.print_log('', aluno_path, tipo_correcao="ia", encoding='utf-8')
         return refined_response
 
-    def create_correction_sheet(self):    
-        wb = self.wb
-        ws = self.ws
-        ws.title = f"Notas_Lab{self.numero_lab}_CES11_2025"
-
-        center_align = Alignment(horizontal="center", vertical="center")
-        for col, header in enumerate(self.headers, start=1):
-            cell = ws.cell(row=1, column=col, value=header)
-            cell.font = Font(name="Arial", size=10)
-            cell.alignment = center_align
-
-        primeira_penalidade = 3  
-        ultima_penalidade = len(self.headers) - 1 
-        start_col_letter = get_column_letter(primeira_penalidade)
-        end_col_letter = get_column_letter(ultima_penalidade)
-
-        for row, aluno in enumerate(self.alunos_list, start=2):
-            nome_formatado = aluno.replace("_", " ").title()
-            cell = ws.cell(row=row, column=1, value=nome_formatado)
-            cell.font = Font(name="Arial", size=10)
-            nota_formula = f"=MAX(100+SUM({start_col_letter}{row}:{end_col_letter}{row}),0)"
-            cell = ws.cell(row=row, column=2, value=nota_formula)
-            cell.font = Font(name="Arial", size=10)
-
-        for col, header in enumerate(self.headers, start=1):
-            max_len = len(header)
-            if col == 1:
-                for aluno in self.alunos_list:
-                    nome_formatado = aluno.replace("_", " ").title()
-                    if len(nome_formatado) > max_len:
-                        max_len = len(nome_formatado)
-            ws.column_dimensions[get_column_letter(col)].width = max_len + 1
-
-        last_row = len(self.alunos_list) + 3 
-        cell = ws.cell(row=last_row, column=1, value="Média")
-        cell.font = Font(name="Arial", size=10)
-        media_formula = f"=SUM(B2:B{len(self.alunos_list)+1})/{len(self.alunos_list)}"
-        cell = ws.cell(row=last_row, column=2, value=media_formula)
-        cell.font = Font(name="Arial", size=10)
-        
-        wb.save(self.sheet_path)
-
-    def add_corrections_to_sheet(self, aluno_row, response_dict):
-        wb = self.wb
-        ws = self.ws
-        for col_idx, header in enumerate(self.headers, start=1):
-            if header in response_dict and response_dict[header]:
-                cell = ws.cell(row=aluno_row, column=col_idx)
-
-                cell.font = Font(name="Arial", size=10)
-
-                if header == "Observações (sem desconto na nota)":
-                    obs_text = "\n".join(f"- {err}" for err in response_dict[header])
-                    existing_value = cell.value or ""
-                    cell.value = f"{existing_value}\n{obs_text}".strip()
-                else:
-                    comment_text = "\n".join(f"- {err}" for err in response_dict[header])
-
-                    cell.comment = Comment(comment_text, "José Alberto Feijão Tizon")
-
-                    total_deduction = sum(
-                        int(re.search(r"-\s*(\d+)", err).group(1))
-                        for err in response_dict[header]
-                        if re.search(r"-\s*\d+", err)
-                    )
-                    existing_value = cell.value if cell.value else ""
-                    cell.value = f"=MAX(-{total_deduction})"
-                    cell.alignment = Alignment(horizontal="right")
-
-        wb.save(self.sheet_path)
-
     def make_student_correction(self, aluno_path, progress):
         self.error_type = "No-Errors"
         self.student_logs = []
@@ -400,7 +326,6 @@ class Lab2Corrector():
                 continue
 
     def make_correction(self):
-        self.create_correction_sheet()
         progress = 1
         try:
             for aluno in self.alunos_list:
