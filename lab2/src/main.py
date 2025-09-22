@@ -12,6 +12,6 @@ numero_lab = 2
 
 #corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, use_ai=True)
 corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, use_ai=False)
-#corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, use_ai=False, aluno='Cauã_de_Lima_Rios')
+#corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, use_ai=False, aluno='Aluno_Teste_1')
 
 corrector.make_correction()

@@ -129,7 +129,7 @@ class Lab2Corrector():
         final_output_path = os.path.join(output_folder, f"{testcase}.txt")
         shutil.copy(output_path[0], final_output_path)
         os.remove(output_path[0])
-        with open(final_output_path, encoding='latin-1') as output_file:
+        with open(final_output_path, encoding='utf-8') as output_file:
             return output_file.readlines()
         
     def get_student_code(self, aluno_path):
@@ -160,14 +160,16 @@ class Lab2Corrector():
             except Exception as e:
                 raise CompilationError(self, f"Ocorreu um erro inesperado na compilacao: {e}\n")
 
-    def run_student_code(self, aluno_path, testcase):
+    def run_student_code(self, aluno_path, testcase_type, testcase):
+        testcase_path = os.path.join(self.testcases_path, testcase_type, testcase)
+        input_file = os.path.join(testcase_path, f"entrada{self.numero_lab}.txt")
+        shutil.copy(input_file, aluno_path)
+
+        # Apenas pro lab 2
+        input_file = os.path.join(testcase_path, f"Entrada{self.numero_lab}.txt")
+        shutil.copy(input_file, aluno_path)
+
         try:
-            testcase_path = os.path.join(self.testcases_path, testcase)
-            subprocess.run(
-                f'cp {testcase_path}/entrada* {aluno_path}',
-                shell=True, 
-                check=True
-            )
             subprocess.run(
                 './a.out', 
                 cwd=aluno_path, 
@@ -185,14 +187,14 @@ class Lab2Corrector():
             raise RuntimeError(self, f"Ocorreu um erro inesperado na execucao do caso teste {testcase}\n")
 
     def check_fopen_path(self, student_code):
-        pattern_entrada = fr'fopen\s*\(\s*"entrada{self.numero_lab}\.txt"\s*,\s*".*?"\s*\)'
+        pattern_entrada = fr'fopen\s*\(\s*"[Ee]ntrada{self.numero_lab}\.txt"\s*,\s*".*?"\s*\)'
         pattern_saida = fr'fopen\s*\(\s*"Lab{self.numero_lab}_[a-zA-Z0-9_]+\.txt"\s*,\s*".*?"\s*\)'
         nome_entrada_correto = re.search(pattern_entrada, student_code) is not None
         nome_saida_correto = re.search(pattern_saida, student_code) is not None
         if not nome_entrada_correto or not nome_saida_correto:
             raise WrongFilePathError(self, "Erro no nome dos arquivos de entrada ou saída\n")
 
-    def correct_code(self, aluno_path, aluno_row):
+    def correct_code(self, aluno_path):
         code = self.get_student_code(aluno_path)
         self.check_fopen_path(code)
         if self.use_ai:
@@ -200,11 +202,11 @@ class Lab2Corrector():
             json_str = "\n".join(response)
             response_dict = json.loads(json_str)
         
-    def correct_output(self, aluno_path, testcase):
-        self.run_student_code(aluno_path, testcase)
+    def correct_output(self, aluno_path, testcase_type, testcase):
+        self.run_student_code(aluno_path, testcase_type, testcase)
         output = self.get_and_handle_output(aluno_path, testcase)
         self.test_formatacao(testcase, output)
-        self.compare_with_testcase(testcase, output)
+        self.compare_with_testcase(testcase_type, testcase, output)
 
     def test_formatacao(self, testcase, output):
         linhas = [linha.rstrip('\n') for linha in output] 
@@ -215,7 +217,6 @@ class Lab2Corrector():
         pos += 4
 
         if pos >= len(linhas) or [w.upper() for w in linhas[pos].split()] != ["FLIGHT", "FROM"]:
-            print([w.upper() for w in linhas[pos].split()])
             raise OutputFormattingError(self, f"Linha 'FLIGHT FROM' ausente no caso teste {testcase}")
         pos += 1
 
@@ -241,7 +242,7 @@ class Lab2Corrector():
             raise OutputFormattingError(self, f"Faltando linha em branco após 'Situacao da fila' no caso teste {testcase}")
         pos += 1
 
-    def compare_with_testcase(self, testcase, output):
+    def compare_with_testcase(self, testcase_type, testcase, output):
         linhas = [linha.rstrip('\n') for linha in output] 
 
         student_authorized_flights = []
@@ -276,7 +277,7 @@ class Lab2Corrector():
                     student_flight_origins[splitted_line[0]] = " ".join(splitted_line[1:])
             i += 1
 
-        answers_path = os.path.join(self.testcases_path, testcase, 'saida2.json')
+        answers_path = os.path.join(self.testcases_path, testcase_type, testcase, 'saida2.json')
         with open(answers_path, "r", encoding="utf-8") as answers_file:
             answers = json.load(answers_file)
         if student_authorized_flights != answers["ordem_voos"]["authorized"]:
@@ -285,6 +286,8 @@ class Lab2Corrector():
             if student_pending_flights != answers["ordem_voos"]["pending"]:
                 raise FailedTestcaseError(self, f"Falhou no caso teste {testcase}: ordem das viagens PENDENTES errada")
             if student_flight_origins != answers["flight_origins"]:
+                print(student_flight_origins)
+                print(answers["flight_origins"])
                 raise FailedTestcaseError(self, f"Falhou no caso teste {testcase}: DESTINO das viagens está errado")
         else:
             if not student_pending_flights:
@@ -313,17 +316,20 @@ class Lab2Corrector():
     def make_student_correction(self, aluno_path, progress):
         self.error_type = "No-Errors"
         self.student_logs = []
-        aluno_row = progress + 1
         try:
-            self.correct_code(aluno_path, aluno_row)
+            self.correct_code(aluno_path)
             self.compile_student_code(aluno_path)
         except (CompilationError, WrongFilePathError):
             return
-        for testcase in os.listdir(self.testcases_path):
-            try:
-                self.correct_output(aluno_path, testcase)
-            except (FailedTestcaseError, RuntimeError, OutputFormattingError):
+        for testcase_type in os.listdir(self.testcases_path):
+            testcase_type_path = os.path.join(self.testcases_path, testcase_type)
+            if not os.path.isdir(testcase_type_path):
                 continue
+            for testcase in os.listdir(testcase_type_path):
+                try:
+                    self.correct_output(aluno_path, testcase_type, testcase)
+                except (FailedTestcaseError, RuntimeError, OutputFormattingError):
+                    continue
 
     def make_correction(self):
         progress = 1
