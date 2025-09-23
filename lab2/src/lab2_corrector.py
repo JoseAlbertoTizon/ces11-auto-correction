@@ -48,18 +48,51 @@ class Student():
         self.num_passed_testcases = 0
 
 class Lab2Corrector():
-    def __init__(self, alunos_path, testcases_path, numero_lab, use_ai, aluno=None):
+    def __init__(self, alunos_path, testcases_path, numero_lab, skip_passed_labs, aluno=None):
         self.alunos_path = alunos_path
-        self.remove_error_type_txts()
         self.create_student_folders()
         if aluno is None:
-            self.alunos_list = sorted(os.listdir(self.alunos_path))
+            self.alunos_list = self.get_students_list(skip_passed_labs)
         else:
             self.alunos_list = [aluno]
+        self.remove_error_type_txts()
         self.testcases_path = testcases_path
         self.numero_lab = numero_lab
-        self.use_ai = use_ai
         self.student = None
+
+    def get_students_list(self, skip_passed_labs):
+        alunos_list = []
+
+        error_files = [
+            "ARQUIVO-NOME.txt",
+            "ERRO-CASOS-TESTE.txt",
+            "ERRO-COMPILACAO.txt",
+            "ERRO-RUNTIME.txt",
+            "FORMATACAO-OUTPUT-ERRADA.txt",
+        ]
+
+        if not skip_passed_labs:
+            for student in os.listdir(self.alunos_path):
+                if student not in error_files:
+                    alunos_list.append(student)
+            return sorted(alunos_list)
+
+        failing_labs = set()
+        for error_file in error_files:
+            error_file_path = os.path.join(self.alunos_path, error_file)
+            if not os.path.exists(error_file_path):
+                continue
+            with open(error_file_path, encoding="utf-8") as f:
+                for line in f:
+                    aluno = line.strip()
+                    if aluno:
+                        failing_labs.add(aluno)
+        
+        for student in os.listdir(self.alunos_path):
+            if student not in error_files and student in failing_labs:
+                alunos_list.append(student)
+        return sorted(alunos_list)
+            
         
     def clear_logs_file(self):
         logs_correcao_path = self.student.path + "/logs_correcao_auto.txt"
@@ -136,8 +169,12 @@ class Lab2Corrector():
         final_output_path = os.path.join(output_folder, f"{testcase}.txt")
         shutil.copy(output_path[0], final_output_path)
         os.remove(output_path[0])
-        with open(final_output_path, encoding='utf-8') as output_file:
-            return output_file.readlines()
+        try:
+            with open(final_output_path, encoding='utf-8') as output_file:
+                return output_file.readlines()
+        except UnicodeDecodeError:           
+            with open(final_output_path, encoding='latin1') as output_file:
+                return output_file.readlines()
         
     def get_student_code(self):
         cpp_path = glob.glob(f'{self.student.path}/Lab*.cpp')
@@ -204,10 +241,6 @@ class Lab2Corrector():
     def correct_code(self):
         code = self.get_student_code()
         self.check_fopen_path(code)
-        if self.use_ai:
-            response = self.do_ai_correction(code)
-            json_str = "\n".join(response)
-            response_dict = json.loads(json_str)
         
     def correct_output(self, testcase_type, testcase):
         self.run_student_code(testcase_type, testcase)
@@ -301,22 +334,6 @@ class Lab2Corrector():
                     if str(k).isdigit() and len(str(k)) == 4}
             if student_filtered != answers["flight_origins"]:
                 raise FailedTestcaseError(self.student, f"Falhou no caso teste {testcase}: DESTINO das viagens está errado")
-
-    # def do_ai_correction(self, student, student_code):
-    #     correction_criteria_prompt = get_correction_criteria()
-    #     correction_instructions_prompt = get_correction_instructions()
-    #     corrector_agent = CorrectorAgent(student.path)
-    #     prompt = get_main_prompt(correction_criteria_prompt, correction_instructions_prompt, student_code)
-    #     response = corrector_agent.respond(prompt)
-    #     refined_prompt = get_refined_prompt(correction_criteria_prompt, correction_instructions_prompt, student_code, response)
-    #     refined_response = corrector_agent.respond(refined_prompt)
-    #     for line in response:
-    #         self.print_log(line, student.path, tipo_correcao="ia", encoding='utf-8')
-    #     self.print_log('', student.path, tipo_correcao="ia", encoding='utf-8')
-    #     for line in refined_response:
-    #         self.print_log(line, student.path, tipo_correcao="ia", encoding='utf-8')
-    #     self.print_log('', student.path, tipo_correcao="ia", encoding='utf-8')
-    #     return refined_response
 
     def make_student_correction(self):
         try:
