@@ -2,6 +2,7 @@
 .venv/
 .vscode/
 lab*/labs-alunos*/
+lab*/labs-teste/*/*.cpp
 lab*/src/__pycache__/
 lab*/testcases/*/
 !lab*/testcases/exemplo-classroom/**

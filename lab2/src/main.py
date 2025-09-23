@@ -5,8 +5,8 @@ lab_folder_path = "./lab2"
 testcases_path = lab_folder_path + "/testcases"
 
 #alunos_path = lab_folder_path + "/labs-alunos-t1"
-#alunos_path = lab_folder_path + "/labs-alunos-t2"
-alunos_path = lab_folder_path + "/labs-teste"
+alunos_path = lab_folder_path + "/labs-alunos-t2"
+#alunos_path = lab_folder_path + "/labs-teste"
 
 numero_lab = 2
 
