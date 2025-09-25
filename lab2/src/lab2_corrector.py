@@ -5,10 +5,6 @@ import shutil
 import traceback
 import json
 import re
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
-from openpyxl.comments import Comment
 from corrector_agent import CorrectorAgent
 from criterios_correcao import get_correction_criteria, get_correction_instructions, get_main_prompt, get_refined_prompt
 
@@ -22,10 +18,6 @@ class CorrectionFailed(Exception):
 class CompilationError(CorrectionFailed):
     def __init__(self, student, message):
         super().__init__(student, "ERRO-COMPILACAO", message)
-
-class RuntimeError(CorrectionFailed):
-    def __init__(self, student, message):
-        super().__init__(student, "ERRO-RUNTIME", message)
 
 class WrongFilePathError(CorrectionFailed):
     def __init__(self, student, message):
@@ -42,58 +34,70 @@ class FailedTestcaseError(CorrectionFailed):
 class Student():
     def __init__(self, student_path):
         self.path = student_path
-        self.error_type = "NO-ERRORS"
+        self.name = os.path.basename(student_path)
+        self.error_type = None
         self.logs = []
         self.num_total_testcases = 0
         self.num_passed_testcases = 0
 
 class Lab2Corrector():
-    def __init__(self, alunos_path, testcases_path, numero_lab, skip_passed_labs, aluno=None):
-        self.alunos_path = alunos_path
-        self.create_student_folders()
-        if aluno is None:
-            self.alunos_list = self.get_students_list(skip_passed_labs)
-        else:
-            self.alunos_list = [aluno]
-        self.remove_error_type_txts()
-        self.testcases_path = testcases_path
-        self.numero_lab = numero_lab
+    def __init__(self, dados_lab):
+        self.students_path = dados_lab.students_path
+        self.testcases_path = dados_lab.testcases_path
+        self.student_errors_path = dados_lab.student_errors_path
+        self.numero_lab = dados_lab.numero_lab
+
         self.student = None
+        self.error_type_to_correct = None
 
-    def get_students_list(self, skip_passed_labs):
-        alunos_list = []
-
-        error_files = [
-            "ARQUIVO-NOME.txt",
-            "ERRO-CASOS-TESTE.txt",
+        self.error_files = [
+            "ARQUIVO-NOME-ERRADO.txt",
             "ERRO-COMPILACAO.txt",
-            "ERRO-RUNTIME.txt",
             "FORMATACAO-OUTPUT-ERRADA.txt",
+            "ERRO-CASOS-TESTE.txt",
+            "NO-ERRORS.txt"
         ]
 
-        if not skip_passed_labs:
-            for student in os.listdir(self.alunos_path):
-                if student not in error_files:
-                    alunos_list.append(student)
-            return sorted(alunos_list)
+        self.create_student_folders()
 
-        failing_labs = set()
-        for error_file in error_files:
-            error_file_path = os.path.join(self.alunos_path, error_file)
-            if not os.path.exists(error_file_path):
+        if dados_lab.aluno is None:
+            self.students = self.get_students_list()
+        else:
+            self.students = [dados_lab.aluno]
+
+        self.error_type_to_correct = self.get_error_type_to_correct()
+        self.remove_error_type_txts()
+
+    def get_students_list(self):
+        students = []
+
+        for folder in os.listdir(self.students_path):
+            student_path = os.path.join(self.students_path, folder)
+            students.append(Student(student_path))
+
+        for file in self.error_files:
+            error_file_path = os.path.join(self.student_errors_path, file)
+            if not os.path.isfile(error_file_path):
                 continue
-            with open(error_file_path, encoding="utf-8") as f:
+            with open(error_file_path, "r") as f:
                 for line in f:
-                    aluno = line.strip()
-                    if aluno:
-                        failing_labs.add(aluno)
-        
-        for student in os.listdir(self.alunos_path):
-            if student not in error_files and student in failing_labs:
-                alunos_list.append(student)
-        return sorted(alunos_list)
+                    student_name = line.strip()
+                    if student_name:
+                        for student in students:
+                            if student.name == student_name:
+                                student.error_type = file[:-4]
+        return sorted(students, key=lambda x: x.name)                          
+
+    def get_error_type_to_correct(self):
+        error_type_to_correct = None
+        for file in self.error_files:
+            error_file_path = os.path.join(self.student_errors_path, file)
+            if not os.path.isfile(error_file_path):
+                continue
+            error_type_to_correct = file[:-4]
+            break
+        return error_type_to_correct
             
-        
     def clear_logs_file(self):
         logs_correcao_path = self.student.path + "/logs_correcao_auto.txt"
         open(logs_correcao_path, "w").close()
@@ -105,34 +109,29 @@ class Lab2Corrector():
             for error_log in self.student.logs:
                 print(error_log, file=logs)
 
-    def log_testcase_results(self, testcase_type, encoding): 
-        logs_correcao_path = self.student.path + "/logs_correcao_auto.txt"
-        with open(logs_correcao_path, "a", encoding=encoding) as logs:
-            print(f"{testcase_type}: {self.student.num_passed_testcases}/{self.student.num_total_testcases}", file=logs)
-
     def add_log(self, message, encoding):
         logs_correcao_path = self.student.path + "/logs_correcao_auto.txt"
         with open(logs_correcao_path, "a", encoding=encoding) as logs:
             print(message, file=logs)                
 
     def create_student_folders(self):
-        lowercase_files = glob.glob(os.path.join(self.alunos_path, "lab*"))
+        lowercase_files = glob.glob(os.path.join(self.students_path, "lab*"))
         for file_path in lowercase_files:
             filename = os.path.basename(file_path)
             new_filename = filename.replace('lab', 'Lab')
-            os.rename(file_path, os.path.join(self.alunos_path, new_filename))
+            os.rename(file_path, os.path.join(self.students_path, new_filename))
 
-        CPP_files = glob.glob(os.path.join(self.alunos_path, "Lab*.CPP"))
+        CPP_files = glob.glob(os.path.join(self.students_path, "Lab*.CPP"))
         for file_path in CPP_files:
             filename = os.path.basename(file_path)
             new_filename = filename.replace('.CPP', '.cpp')
-            os.rename(file_path, os.path.join(self.alunos_path, new_filename))
+            os.rename(file_path, os.path.join(self.students_path, new_filename))
 
-        cpp_files = glob.glob(os.path.join(self.alunos_path, "Lab*.cpp"))
+        cpp_files = glob.glob(os.path.join(self.students_path, "Lab*.cpp"))
         for file_path in cpp_files:
             filename = os.path.basename(file_path) 
             folder_name = filename[5:].replace('.cpp','')
-            new_folder_path = os.path.join(self.alunos_path, folder_name)
+            new_folder_path = os.path.join(self.students_path, folder_name)
             os.makedirs(new_folder_path, exist_ok=True)
             shutil.move(file_path, os.path.join(new_folder_path, filename))  
 
@@ -148,17 +147,19 @@ class Lab2Corrector():
                 os.remove(full_path)
             elif f.endswith(".txt") and not f.startswith("logs_correcao"):
                 os.remove(full_path)
-                
-    def remove_error_type_txts(self):
-        for filename in os.listdir(self.alunos_path):
-            file_path = os.path.join(self.alunos_path, filename)
-            if os.path.isfile(file_path) and filename.endswith(".txt"):
-                os.remove(file_path)
 
-    def add_to_error_type_txt(self):
-        error_file_path = os.path.join(self.alunos_path, f"{self.student.error_type}.txt")
-        with open(error_file_path, "a", encoding="utf-8") as f:
-            f.write(os.path.basename(self.student.path) + "\n")
+    def remove_error_type_txts(self):
+        for file in self.error_files:
+            error_file_path = os.path.join(self.student_errors_path, file)
+            if os.path.isfile(error_file_path):
+                os.remove(error_file_path)
+
+    def create_error_type_txts(self):
+        for student in self.students:
+            error_file = f"{student.error_type}.txt"
+            error_file_path = os.path.join(self.student_errors_path, error_file)
+            with open(error_file_path, "a") as file:
+                file.write(student.name + "\n")
 
     def get_and_handle_output(self, testcase):
         output_path = glob.glob(f'{self.student.path}/Lab*.txt')
@@ -200,12 +201,12 @@ class Lab2Corrector():
             except subprocess.CalledProcessError as e:
                 raise CompilationError(self.student, f"Codigo de saida: {e.returncode}\n")
             except subprocess.TimeoutExpired:
-                raise CompilationError(self.student, f"Tempo limite de compilacao excedido.", self.student.path)
+                raise CompilationError(self.student, f"Tempo limite de compilacao excedido.")
             except Exception as e:
                 raise CompilationError(self.student, f"Ocorreu um erro inesperado na compilacao: {e}\n")
 
-    def run_student_code(self, testcase_type, testcase):
-        testcase_path = os.path.join(self.testcases_path, testcase_type, testcase)
+    def run_student_code(self, testcase):
+        testcase_path = os.path.join(self.testcases_path, testcase)
         input_file = os.path.join(testcase_path, f"entrada{self.numero_lab}.txt")
         shutil.copy(input_file, self.student.path)
 
@@ -224,11 +225,11 @@ class Lab2Corrector():
                 timeout=5
             )
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(self.student, f"Erro na execucao do caso teste {testcase}.\nCodigo de saida: {e.returncode}\n")
+            raise FailedTestcaseError(self.student, f"Erro na execucao do caso teste {testcase}.\nCodigo de saida: {e.returncode}\n")
         except subprocess.TimeoutExpired:
-            raise RuntimeError(self.student, f"Tempo limite de execucao do caso teste {testcase} excedido")
+            raise FailedTestcaseError(self.student, f"Tempo limite de execucao do caso teste {testcase} excedido")
         except Exception as e:
-            raise RuntimeError(self.student, f"Ocorreu um erro inesperado na execucao do caso teste {testcase}: {e}\n")
+            raise FailedTestcaseError(self.student, f"Ocorreu um erro inesperado na execucao do caso teste {testcase}: {e}\n")
 
     def check_fopen_path(self, student_code):
         pattern_entrada = fr'fopen\s*\(\s*"[Ee]ntrada{self.numero_lab}\.txt"\s*,\s*".*?"\s*\)'
@@ -242,19 +243,29 @@ class Lab2Corrector():
         code = self.get_student_code()
         self.check_fopen_path(code)
         
-    def correct_output(self, testcase_type, testcase):
-        self.run_student_code(testcase_type, testcase)
+    def correct_output(self, testcase):
+        self.run_student_code(testcase)
         output = self.get_and_handle_output(testcase)
         self.test_formatacao(testcase, output)
-        self.compare_with_testcase(testcase_type, testcase, output)
+        self.compare_with_testcase(testcase, output)
 
     def test_formatacao(self, testcase, output):
         linhas = [linha.rstrip('\n') for linha in output] 
-        pos = 0
 
         if len(linhas) < 4:
-            raise OutputFormattingError(self.student, f"Esperadas 4 linhas de cabeçalho no caso teste {testcase}")
-        pos += 4
+            raise OutputFormattingError(
+                self.student,
+                f"Output vazio no caso teste {testcase}"
+            )
+
+        pos = 3
+
+        if not re.fullmatch(r'\s*[-=]+\s*', linhas[pos]):
+            raise OutputFormattingError(
+                self.student,
+                f"Cabecalho nao tem exatamente 3 linhas no caso teste {testcase}"
+            )
+        pos += 1
 
         if pos >= len(linhas) or [w.upper() for w in linhas[pos].split()] != ["FLIGHT", "FROM"]:
             raise OutputFormattingError(self.student, f"Linha 'FLIGHT FROM' ausente no caso teste {testcase}")
@@ -274,15 +285,17 @@ class Lab2Corrector():
             raise OutputFormattingError(self.student, f"Faltando linha em branco após bloco de voos autorizados no caso teste {testcase}")
         pos += 1
 
-        if pos >= len(linhas) or [w.upper() for w in linhas[pos].split()] != ["SITUACAO", "DA", "FILA"]:
+        linha = [w.upper() for w in linhas[pos]
+                .replace("Ç", "C").replace("ç", "C")
+                .replace("ã", "A").replace("Ã", "A")
+                .replace(":", "")
+                .split()]
+
+        if pos >= len(linhas) or linha != ["SITUACAO", "DA", "FILA"]:
             raise OutputFormattingError(self.student, f"Linha 'Situacao da fila' ausente no caso teste {testcase}")
         pos += 1
 
-        if pos >= len(linhas) or linhas[pos].strip() != "":
-            raise OutputFormattingError(self.student, f"Faltando linha em branco após 'Situacao da fila' no caso teste {testcase}")
-        pos += 1
-
-    def compare_with_testcase(self, testcase_type, testcase, output):
+    def compare_with_testcase(self, testcase, output):
         linhas = [linha.rstrip('\n') for linha in output] 
 
         student_authorized_flights = []
@@ -294,7 +307,15 @@ class Lab2Corrector():
 
         i = 0
         while i < len(linhas):
-            splitted_line = linhas[i].split()
+            splitted_line = (
+                linhas[i]
+                .replace("Ç", "C")
+                .replace("ç", "C")
+                .replace("ã", "A")
+                .replace("Ã", "A")
+                .replace(":", "")
+                .split()
+            )
             if linhas[i].strip() == "":
                 i += 1
                 continue
@@ -317,10 +338,12 @@ class Lab2Corrector():
                     student_flight_origins[splitted_line[0]] = " ".join(splitted_line[1:])
             i += 1
 
-        answers_path = os.path.join(self.testcases_path, testcase_type, testcase, 'saida2.json')
+        answers_path = os.path.join(self.testcases_path, testcase, 'saida2.json')
         with open(answers_path, "r", encoding="utf-8") as answers_file:
             answers = json.load(answers_file)
         if student_authorized_flights != answers["ordem_voos"]["authorized"]:
+            # print(self.student.name)
+            # print(student_authorized_flights, answers["ordem_voos"]["authorized"])
             raise FailedTestcaseError(self.student, f"Falhou no caso teste {testcase}: ordem das viagens AUTORIZADAS errada")
         if answers["ordem_voos"]["pending"]:
             if student_pending_flights != answers["ordem_voos"]["pending"]:
@@ -342,34 +365,38 @@ class Lab2Corrector():
         except (CompilationError, WrongFilePathError):
             return
         self.add_log(f"\n{"-"*25}\nRESULTADOS CASOS TESTE:\n{"-"*25}\n", encoding="utf-8")
-        for testcase_type in os.listdir(self.testcases_path):
-            testcase_type_path = os.path.join(self.testcases_path, testcase_type)
-            testcase_list = os.listdir(testcase_type_path)
-            self.student.num_total_testcases = len(testcase_list)
-            self.student.num_passed_testcases = 0
-            for testcase in testcase_list:
-                try:
-                    self.correct_output(testcase_type, testcase)
-                    self.student.num_passed_testcases += 1
-                except (FailedTestcaseError, RuntimeError, OutputFormattingError):
-                    continue
-            self.log_testcase_results(testcase_type, encoding="utf-8")
+        for testcase in os.listdir(self.testcases_path):
+            try:
+                self.correct_output(testcase)
+                self.student.num_passed_testcases += 1
+            except (FailedTestcaseError, FailedTestcaseError, OutputFormattingError):
+                continue
+        if not self.student.logs:
+            self.student.error_type = "NO-ERRORS"
+        
 
-    def make_correction(self):
+    def make_correction(self, skip_passed_labs):
         progress = 1
         try:
-            for aluno in self.alunos_list:
-                print(f"Correcting... ({progress}/{len(self.alunos_list)}). Current student: {aluno}")
-                student_path = os.path.join(self.alunos_path, aluno)
-                self.student = Student(student_path)
+            for student in self.students:
+                if student.error_type is None:
+                    skip_passed_labs = False
+                    break
+            if skip_passed_labs:
+                students_to_correct = [student for student in self.students if student.error_type == self.error_type_to_correct]
+            else:
+                students_to_correct = self.students
+            for student in students_to_correct:
+                self.student = student
+                print(f"Correcting... ({progress}/{len(students_to_correct)}). Current student: {student.name }")
                 progress += 1
                 self.clear_logs_file()
                 self.remove_outputs_folder()
                 self.make_student_correction()
                 self.remove_unwanted_files()
-                self.add_to_error_type_txt()
                 self.add_log(f"\n{"-"*25}\nLOGS ERROS:\n{"-"*25}\n", encoding="utf-8")
                 self.log_errors(encoding="utf-8")
+            self.create_error_type_txts()
             print("Correction ended successfully")
         except Exception as e:
             print(f"Correction failed due to error: {e}")

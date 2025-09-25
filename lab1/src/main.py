@@ -12,7 +12,7 @@ sheet_path = "Planilha.xlsx"
 numero_lab = 1
 
 #corrector = Lab1Corrector(alunos_path, testcases_path, sheet_path, numero_lab, use_ai=True)
-#corrector = Lab1Corrector(alunos_path, testcases_path, sheet_path, numero_lab, use_ai=False)
-corrector = Lab1Corrector(alunos_path, testcases_path, sheet_path, numero_lab, use_ai=False, aluno='Vitor_Lima_Maximo')
+corrector = Lab1Corrector(alunos_path, testcases_path, sheet_path, numero_lab, use_ai=False)
+#corrector = Lab1Corrector(alunos_path, testcases_path, sheet_path, numero_lab, use_ai=False, aluno='')
 
 corrector.make_correction()

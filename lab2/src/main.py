@@ -1,17 +1,22 @@
 from lab2_corrector import Lab2Corrector
 
-lab_folder_path = "./lab2"
+class DadosLab:
+    def __init__(self):
+        self.lab_folder_path = "./lab2"
+        self.testcases_path = self.lab_folder_path + "/testcases"
+        self.student_errors_path = self.lab_folder_path + "/erros-alunos"
 
-testcases_path = lab_folder_path + "/testcases"
+        self.students_path = self.lab_folder_path + "/labs-alunos-t1"
+        #self.students_path = self.lab_folder_path + "/labs-alunos-t2"
+        #self.students_path = self.lab_folder_path + "/labs-teste"
 
-#alunos_path = lab_folder_path + "/labs-alunos-t1"
-alunos_path = lab_folder_path + "/labs-alunos-t2"
-#alunos_path = lab_folder_path + "/labs-teste"
+        self.numero_lab = 2
 
-numero_lab = 2
+        self.aluno=None
+        #self.aluno='Aluno_Teste_1'
 
-#corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, skip_passed_labs=True)
-corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, skip_passed_labs=False)
-#corrector = Lab2Corrector(alunos_path, testcases_path, numero_lab, skip_passed_labs=False, aluno='Aluno_Teste_1')
 
-corrector.make_correction()
+corrector = Lab2Corrector(DadosLab())
+
+#corrector.make_correction(skip_passed_labs=False)
+corrector.make_correction(skip_passed_labs=True)
