@@ -3,6 +3,7 @@
 .vscode/
 lab*/labs-alunos*/
 lab*/labs-teste/*/*.cpp
+lab*/labs-teste/*/outputs/*
 lab*/erros-alunos
 lab*/src/__pycache__/
 lab*/testcases/*/
