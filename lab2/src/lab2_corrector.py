@@ -5,9 +5,7 @@ import shutil
 import traceback
 import json
 import re
-from corrector_agent import CorrectorAgent
-from criterios_correcao import get_correction_criteria, get_correction_instructions, get_main_prompt, get_refined_prompt
-
+from bronco_finder_agent import CorrectorAgent
 
 class CorrectionFailed(Exception):
     def __init__(self, student, error_type, message):
@@ -46,6 +44,8 @@ class Lab2Corrector():
         self.testcases_path = dados_lab.testcases_path
         self.student_errors_path = dados_lab.student_errors_path
         self.numero_lab = dados_lab.numero_lab
+        self.skip_passed_labs = dados_lab.skip_passed_labs
+        self.do_bronco_detection = dados_lab.do_bronco_detection
 
         self.student = None
         self.error_type_to_correct = None
@@ -59,11 +59,7 @@ class Lab2Corrector():
         ]
 
         self.create_student_folders()
-
-        if dados_lab.aluno is None:
-            self.students = self.get_students_list()
-        else:
-            self.students = [dados_lab.aluno]
+        self.students = self.get_students_list()
 
         self.error_type_to_correct = self.get_error_type_to_correct()
         self.remove_error_type_txts()
@@ -242,6 +238,8 @@ class Lab2Corrector():
     def correct_code(self):
         code = self.get_student_code()
         self.check_fopen_path(code)
+        if self.detect_bronco:
+            self.detect_bronco(code)
         
     def correct_output(self, testcase):
         self.run_student_code(testcase)
@@ -358,6 +356,59 @@ class Lab2Corrector():
             if student_filtered != answers["flight_origins"]:
                 raise FailedTestcaseError(self.student, f"Falhou no caso teste {testcase}: DESTINO das viagens está errado")
 
+    def detect_bronco(self, code):
+        corrector_agent = CorrectorAgent()
+        
+        generic_prompt = '''
+        **Sua função principal**: Você irá identificar no código do aluno processos que tornem o código repetitivo ou que realizam operações
+        desnecessárias. Por exemplo, dar malloc em cada posição de um vetor em vez de dar um único malloc no vetor inteiro, ou usar uma lógica
+        muito complexa para fazer algo simples. Seja leniente para coisas mais bobas, como fazer if else para retornar bool no lugar
+        de apenas retornar o bool diretamente, nâo identifique esse tipo de atitude. Também não identifique erros reais no código
+        que façam ele não funcionar corretamente, como erros de lógica, esses já foram identificados na correção automática. Sua
+        função não é achar o que está errado, mas o que está subótimo/repetitivo/feio porém funcional. Também identifique más
+        práticas de código, como variáveis não inicializadas que geram acesso indevido, e falta de fclose/free, ou erros no free
+        que gerem vazamento de memória.
+        '''
+
+        specific_prompt = '''
+        **Sua função secundária**: Identificar se quando a pista está liberada e não há aviões na pista o aluno printa EXATAMENTE a mensagem
+        '0000    Nenhum aviao pousando'. Tudo bem o espaçamento entre o código e a frase ser diferente, mas a frase deve
+        ser rigorosamente igual (exceto por \n, espaços a mais ou a menos tab etc). Ver se o aluno usa lista encadeada, ver se na lista encadeada o no raiz é o de maior 
+        prioridade (proximo aviao a pousar), ver se o aluno armazenou o comando na torre no struct (o que não deve ser feito)
+        e ver se o aluno utilizou nó sentinela (não deve utilizar).
+        '''
+
+        final_instructions = f'''
+        **Formato da resposta**:  
+        - Separe em duas seções:  
+        1. Más práticas/repetições encontradas  
+        2. Verificação da mensagem exigida  
+        - Escreva em bullet points (um item por linha).
+        - Se não houver nada a apontar em uma seção, escreva: “Nenhum problema identificado”.  
+
+        Ex:
+        Más práticas/repetições encontradas:
+        1) Problema 1
+        2) Problema 2
+
+        Verificação da mensagem exigida:
+        1) Problema 1
+        2) Problema 2
+
+        Segue o código do aluno:
+
+        {code}
+        '''
+
+        prompt = f"{generic_prompt}\n\n{specific_prompt}\n\n{final_instructions}"
+
+        response = corrector_agent.respond(prompt)
+        
+        logs_bronco_path = self.student.path + "/logs_correcao_bronco.txt"
+        with open(logs_bronco_path, "w") as logs:
+            for line in response:
+                print(line, file=logs)                
+
     def make_student_correction(self):
         try:
             self.correct_code()
@@ -375,14 +426,14 @@ class Lab2Corrector():
             self.student.error_type = "NO-ERRORS"
         
 
-    def make_correction(self, skip_passed_labs):
+    def make_correction(self):
         progress = 1
         try:
             for student in self.students:
                 if student.error_type is None:
-                    skip_passed_labs = False
+                    self.skip_passed_labs = False
                     break
-            if skip_passed_labs:
+            if self.skip_passed_labs:
                 students_to_correct = [student for student in self.students if student.error_type == self.error_type_to_correct]
             else:
                 students_to_correct = self.students

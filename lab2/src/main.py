@@ -12,11 +12,14 @@ class DadosLab:
 
         self.numero_lab = 2
 
-        self.aluno=None
-        #self.aluno='Aluno_Teste_1'
+        self.skip_passed_labs = True
+        #self.skip_passed_labs = False
+
+        #self.do_bronco_detection = True
+        self.do_bronco_detection = False
 
 
 corrector = Lab2Corrector(DadosLab())
 
 #corrector.make_correction(skip_passed_labs=False)
-corrector.make_correction(skip_passed_labs=True)
+corrector.make_correction()

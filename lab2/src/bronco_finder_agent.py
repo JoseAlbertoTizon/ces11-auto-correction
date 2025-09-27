@@ -11,9 +11,6 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 import time
 
 class CorrectorAgent:
-    def __init__(self, aluno_path):
-        self.aluno_path = aluno_path
-
     def post_process(self, response_text):
         lines = response_text.splitlines()
         start_idx = next((i for i, line in enumerate(lines) if "{" in line), None)
