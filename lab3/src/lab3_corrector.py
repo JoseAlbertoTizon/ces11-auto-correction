@@ -5,7 +5,7 @@ import shutil
 import traceback
 import json
 import re
-from bronco_finder_agent import CorrectorAgent
+from src.bronco_finder_agent import CorrectorAgent
 
 class CorrectionFailed(Exception):
     def __init__(self, student, error_type, message):
@@ -44,11 +44,11 @@ class Lab3Corrector():
         self.testcases_path = dados_lab.testcases_path
         self.student_errors_path = dados_lab.student_errors_path
         self.numero_lab = dados_lab.numero_lab
-        self.skip_passed_labs = dados_lab.skip_passed_labs
         self.do_bronco_detection = dados_lab.do_bronco_detection
+        self.error_type_to_correct = dados_lab.error_type_to_correct
+        self.student_to_correct = dados_lab.student_to_correct
 
         self.student = None
-        self.error_type_to_correct = None
 
         self.error_files = [
             "ARQUIVO-NOME-ERRADO.txt",
@@ -61,10 +61,13 @@ class Lab3Corrector():
         self.create_student_folders()
         self.students = self.get_students_list()
 
-        self.error_type_to_correct = self.get_error_type_to_correct()
         self.remove_error_type_txts()
 
     def get_students_list(self):
+        if self.student_to_correct:
+            student_path = os.path.join(self.students_path, self.student_to_correct)
+            return [Student(student_path)]
+
         students = []
 
         for folder in os.listdir(self.students_path):
@@ -84,16 +87,6 @@ class Lab3Corrector():
                             if student.name == student_name:
                                 student.error_type = file[:-4]
         return sorted(students, key=lambda x: x.name)                          
-
-    def get_error_type_to_correct(self):
-        error_type_to_correct = None
-        for file in self.error_files:
-            error_file_path = os.path.join(self.student_errors_path, file)
-            if not os.path.isfile(error_file_path):
-                continue
-            error_type_to_correct = file[:-4]
-            break
-        return error_type_to_correct
             
     def clear_logs_file(self):
         logs_correcao_path = self.student.path + "/logs_correcao_auto.txt"
@@ -424,13 +417,13 @@ class Lab3Corrector():
         progress = 1
         try:
             for student in self.students:
-                if student.error_type is None:
-                    self.skip_passed_labs = False
+                if student.error_type is None:  # If there's a missing student error, correct all
+                    self.error_type_to_correct = 'ALL'
                     break
-            if self.skip_passed_labs:
-                students_to_correct = [student for student in self.students if student.error_type == self.error_type_to_correct]
-            else:
+            if self.error_type_to_correct == 'ALL':
                 students_to_correct = self.students
+            else:
+                students_to_correct = [student for student in self.students if student.error_type == self.error_type_to_correct]
             for student in students_to_correct:
                 self.student = student
                 print(f"Correcting... ({progress}/{len(students_to_correct)}). Current student: {student.name }")

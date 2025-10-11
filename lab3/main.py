@@ -1,4 +1,5 @@
-from lab3_corrector import Lab3Corrector
+import sys
+from src.lab3_corrector import Lab3Corrector
 
 class DadosLab:
     def __init__(self):
@@ -19,8 +20,19 @@ class DadosLab:
         #self.do_bronco_detection = True
         self.do_bronco_detection = False
 
+        args = sys.argv
 
+        if len(args) < 2:
+            print("Uso: python script.py <tipo_erro> ou -s <aluno>")
+            sys.exit(1)
+
+        if args[1] != '-s':  # Correct a single student
+            self.error_type_to_correct = args[1].upper()
+            self.student_to_correct = None
+        else: 
+            self.error_type_to_correct = 'ALL'
+            self.student_to_correct = args[2]
+        
 corrector = Lab3Corrector(DadosLab())
 
-#corrector.make_correction(skip_passed_labs=False)
 corrector.make_correction()
