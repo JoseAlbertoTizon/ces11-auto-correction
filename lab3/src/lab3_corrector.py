@@ -5,7 +5,7 @@ import shutil
 import traceback
 import json
 import re
-from src.bronco_finder_agent import CorrectorAgent
+from .bronco_finder_agent import CorrectorAgent
 
 class CorrectionFailed(Exception):
     def __init__(self, student, error_type, message):
@@ -47,6 +47,9 @@ class Lab3Corrector():
         self.do_bronco_detection = dados_lab.do_bronco_detection
         self.error_type_to_correct = dados_lab.error_type_to_correct
         self.student_to_correct = dados_lab.student_to_correct
+
+        if self.student_to_correct:
+            self.error_type_to_correct = 'ALL'
 
         self.student = None
 
@@ -417,7 +420,7 @@ class Lab3Corrector():
         progress = 1
         try:
             for student in self.students:
-                if student.error_type is None:  # If there's a missing student error, correct all
+                if student.error_type is None:  # If any student error is missing, correct all
                     self.error_type_to_correct = 'ALL'
                     break
             if self.error_type_to_correct == 'ALL':
