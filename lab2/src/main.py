@@ -6,9 +6,9 @@ class DadosLab:
         self.testcases_path = self.lab_folder_path + "/testcases"
         self.student_errors_path = self.lab_folder_path + "/erros-alunos"
 
-        self.students_path = self.lab_folder_path + "/labs-alunos-t1"
+        #self.students_path = self.lab_folder_path + "/labs-alunos-t1"
         #self.students_path = self.lab_folder_path + "/labs-alunos-t2"
-        #self.students_path = self.lab_folder_path + "/labs-teste"
+        self.students_path = self.lab_folder_path + "/labs-teste"
 
         self.numero_lab = 2
 

@@ -8,8 +8,8 @@ class DadosLab:
 
         #self.students_path = self.lab_folder_path + "/labs-alunos-t1"
         #self.students_path = self.lab_folder_path + "/labs-alunos-t2"
-        #self.students_path = self.lab_folder_path + "/labs-teste"
-        self.students_path = self.lab_folder_path + "/a"
+        self.students_path = self.lab_folder_path + "/labs-teste"
+        #self.students_path = self.lab_folder_path + "/a"
 
         self.numero_lab = 3
 

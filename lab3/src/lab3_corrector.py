@@ -331,42 +331,37 @@ class Lab3Corrector():
             else:
                 raise FailedTestcaseError(self.student, f"Output nao faz sentido no caso teste {testcase}")
             
-        answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
-        with open(answers_path, "r", encoding="utf-8") as answers_file:
-            answers = json.load(answers_file)
+            answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
+            with open(answers_path, "r", encoding="utf-8") as answers_file:
+                answers = json.load(answers_file)
 
-        if num_operations != answers["num_operations"]:
-            error_message1 = f"Falhou no caso teste {testcase}: NUMERO de operacoes errado\n"
-        else:
-            error_message1 = ''
-        if num_recursive_calls != answers["num_recursive_calls"]:
-            error_message2 = f"Falhou no caso teste {testcase}: NUM CHAMADAS RECURSIVAS errado\n"
-        else:
-            error_message2 = ''
-        
-        try:
-            num_operations = 0
-            matrices = [[[i+1], matrix] for i, matrix in enumerate(answers['matrices'])]
-            for i in order:
-                for j in range(len(matrices)):
-                    if i in matrices[j][0]:
-                        op_count = matrices[j][1][0] * matrices[j][1][1] * matrices[j+1][1][1]                        
-                        num_operations += op_count
-                        matrices[j][0].extend(matrices[j+1][0])
-                        matrices[j][1] = [matrices[j][1][0], matrices[j+1][1][1]]
-                        matrices.pop(j+1)
-                        break
-        except Exception as e:
-            error_message = error_message1 + error_message2 + f"Falhou no caso teste {testcase}: ORDEM das operacoes não faz sentido"
-            raise FailedTestcaseError(self.student, error_message)
+            error_message = ''
+            if num_operations != answers["num_operations"]:
+                error_message += f"Falhou no caso teste {testcase}: NUMERO de operacoes errado\n"
+            if num_recursive_calls != answers["num_recursive_calls"]:
+                error_message += f"Falhou no caso teste {testcase}: NUM CHAMADAS RECURSIVAS errado\n"
+            if order != answers["possible_order"]:
+                try:
+                    num_operations = 0
+                    matrices = [[[i+1], matrix] for i, matrix in enumerate(answers['matrices'])]
+                    for i in order:
+                        for j in range(len(matrices)):
+                            if i in matrices[j][0]:
+                                op_count = matrices[j][1][0] * matrices[j][1][1] * matrices[j+1][1][1]                        
+                                num_operations += op_count
+                                matrices[j][0].extend(matrices[j+1][0])
+                                matrices[j][1] = [matrices[j][1][0], matrices[j+1][1][1]]
+                                matrices.pop(j+1)
+                                break
+                except Exception as e:
+                    error_message += f"Falhou no caso teste {testcase}: ORDEM das operacoes não faz sentido"
+                    raise FailedTestcaseError(self.student, error_message)
 
-        if num_operations != answers["num_operations"]:
-            error_message = error_message1 + error_message2 + f"Falhou no caso teste {testcase}: ORDEM das operacoes não é ótima"
-            raise FailedTestcaseError(self.student, error_message)
-
-        if error_message1 or error_message2:
-            error_message = error_message1 + error_message2
-            raise FailedTestcaseError(self.student, error_message)
+                if num_operations != answers["num_operations"]:
+                    error_message += f"Falhou no caso teste {testcase}: ORDEM NAO OTIMA"
+                else:
+                    error_message += f"Falhou no caso teste {testcase}: ORDEM CORRETA mas FORA DO PADRAO"
+                raise FailedTestcaseError(self.student, error_message)
 
 
     def detect_bronco(self, code):
