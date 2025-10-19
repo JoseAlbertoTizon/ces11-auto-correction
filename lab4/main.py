@@ -1,4 +1,4 @@
-from src.lab3_corrector import LabCorrector
+from src.lab_corrector import LabCorrector
 from dados_lab import DadosLab
 
 
