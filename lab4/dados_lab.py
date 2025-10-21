@@ -46,7 +46,38 @@ class DadosLab:
         self.do_bronco_detection = args.bronco
         self.student_to_correct = args.student
 
-        self.run_timeout = 10
         self.compile_timeout = 5
 
-        self.student_folder_files = ["logs_correcao_auto.txt", "logs_correcao_bronco.txt", ".cpp"]
+        # Increase this if a testcase takes long to run
+        self.run_timeout = 5
+
+        self.student_folder_files = ["logs_correcao_auto.txt", "logs_correcao_bronco.txt", "outputs", ".cpp"]
+
+        # The field in "saida*.json" which contains the correct order of output
+        self.json_field_with_array = "order"
+
+        # If you want to use values in json field array to quickly build a regex
+        self.use_json_to_get_line_patterns = True
+
+        # Or else directly set line patterns
+        self.line_regexes = []
+
+        self.value_regexes = [
+            r"^(.*\S).*$"
+        ]
+
+        # Dict to find int values on the output txt
+        # Keys need to be on the EXACT order
+        # To keep it simple, those will be used both to find valid lines and to extract the value from them
+        self.value_to_line_regexes = {
+            "num_comparacoes": [
+            r'\bcomparacoes\b',
+            r'\bcomparaçoes\b',
+            r'\bcomparacões\b',
+            r'\bcomparações\b',
+            r'\bfeitas\b'
+            ]
+        }
+
+        self.value_to_value_regexes = self.value_to_line_regexes
+

@@ -5,7 +5,8 @@ import shutil
 import traceback
 import json
 import re
-from .bronco_finder_agent import CorrectorAgent
+from src.bronco_finder_agent import CorrectorAgent
+import src.utils as utils
 
 class CorrectionFailed(Exception):
     def __init__(self, student, error_type, message):
@@ -50,6 +51,12 @@ class LabCorrector():
         self.run_timeout = dados_lab.run_timeout
         self.compile_timeout = dados_lab.compile_timeout
         self.student_folder_files = dados_lab.student_folder_files
+        self.use_json_to_get_line_patterns = dados_lab.use_json_to_get_line_patterns
+        self.json_field_with_array = dados_lab.json_field_with_array
+        self.line_regexes = dados_lab.line_regexes
+        self.value_regexes = dados_lab.value_regexes
+        self.value_to_line_regexes = dados_lab.value_to_line_regexes 
+        self.value_to_value_regexes = dados_lab.value_to_value_regexes            
 
         # If only one student, correct using all criteria
         if self.student_to_correct:
@@ -193,7 +200,7 @@ class LabCorrector():
                     check=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
-                    timeout=self.compile_timeot
+                    timeout=self.compile_timeout
                 )
                 if result.returncode == 0 and result.stderr:
                     self.add_log(f"WARNINGS NA COMPILACAO:\n{result.stderr.decode('utf-8', errors='replace')}", encoding="utf-8")
@@ -245,126 +252,54 @@ class LabCorrector():
     def correct_output(self, testcase):
         self.run_student_code(testcase)
         output = self.get_and_handle_output(testcase)
-        self.test_formatacao(testcase, output)
-        self.compare_with_testcase(testcase, output)
+        self.process_student_output(testcase, output)
 
-    def test_formatacao(self, testcase, output):
-        linhas = [linha.rstrip('\n') for linha in output] 
+    def process_student_output(self, testcase, output):    
+        lines = [line.rstrip('\n') for line in output] 
 
-        if len(linhas) < 4:
+        if len(lines) < 2:
             raise OutputFormattingError(
                 self.student,
                 f"Output vazio no caso teste {testcase}"
             )
         
-        pos = 0
-
-        while not re.search(r'\btotal\b', linhas[pos], re.IGNORECASE):
-            pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
-            if pos >= len(linhas):
-                raise OutputFormattingError(
-                    self.student,
-                    f"Nao printou total de multiplicacoes no caso teste {testcase}"
-                )
-        pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
-            if pos >= len(linhas):
-                raise OutputFormattingError(
-                    self.student,
-                    f"Nao printou numero de chamadas recursivas no caso teste {testcase}"
-                )
-        pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
-            if pos >= len(linhas):
-                raise OutputFormattingError(
-                    self.student,
-                    f"Nao printou a ordem de multiplicacao no caso teste {testcase}"
-                )
-        pos += 1
-
-    def compare_with_testcase(self, testcase, output):
-        linhas = [linha.rstrip('\n') for linha in output] 
-
-        order = []
-        num_operations = None
-        num_recursive_calls = None
-
-        pos = 0
-
-        while not re.search(r'\btotal\b', linhas[pos], re.IGNORECASE):
-            pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
-
-        num_operations = int(re.search(r'\d+', linhas[pos]).group())
-        pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
-
-        num_recursive_calls = int(re.search(r'\d+', linhas[pos]).group())
-        pos += 1
-
-        while not re.search(r'\d+', linhas[pos]):
-            pos += 1
+        # Get the correct answers and line matching patterns
+        answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
+        with open(answers_path, "r", encoding="utf-8") as answers_file:
+            answers = json.load(answers_file)
+            line_regexes_from_json = []
+            for string in answers[self.json_field_with_array]:
+                line_regexes_from_json.append(utils.make_regex_to_match_string(utils.convert_special_caracters(string)))
         
-        for linha in linhas[pos:]:
-            if not re.search(r'\d+', linha):
-                break
-            if 'x' in linha:
-                left, _ = linha.split('x')
-            elif 'X' in linha:
-                left, _ = linha.split('X')
-            else:
-                raise FailedTestcaseError(self.student, f"Output nao faz sentido no caso teste {testcase}")
-            values_left = re.findall(r'\d+', left)
-            if len(values_left) == 1:
-                order.append(int(values_left[0]))
-            elif len(values_left) == 2:
-                order.append(int(values_left[1]))
-            else:
-                raise FailedTestcaseError(self.student, f"Output nao faz sentido no caso teste {testcase}")
+        # Correct all values the student should print on output
+        wrong_values = []
+        for value_name in self.value_to_line_regexes:
+            student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_line_regexes[value_name], self.value_to_value_regexes[value_name])
+            # If can't find a value, raise error asap
+            if student_value is None:
+                raise OutputFormattingError(self.student, f"Nao imprimiu {value_name.upper()}")
+            # If value is diff from the answer, continue correction
+            if student_value != answers[value_name]:
+                wrong_values.append(value_name)
             
-            answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
-            with open(answers_path, "r", encoding="utf-8") as answers_file:
-                answers = json.load(answers_file)
-
-            error_message = ''
-            if num_operations != answers["num_operations"]:
-                error_message += f"Falhou no caso teste {testcase}: NUMERO de operacoes errado\n"
-            if num_recursive_calls != answers["num_recursive_calls"]:
-                error_message += f"Falhou no caso teste {testcase}: NUM CHAMADAS RECURSIVAS errado\n"
-            if order != answers["possible_order"]:
-                try:
-                    num_operations = 0
-                    matrices = [[[i+1], matrix] for i, matrix in enumerate(answers['matrices'])]
-                    for i in order:
-                        for j in range(len(matrices)):
-                            if i in matrices[j][0]:
-                                op_count = matrices[j][1][0] * matrices[j][1][1] * matrices[j+1][1][1]                        
-                                num_operations += op_count
-                                matrices[j][0].extend(matrices[j+1][0])
-                                matrices[j][1] = [matrices[j][1][0], matrices[j+1][1][1]]
-                                matrices.pop(j+1)
-                                break
-                except Exception as e:
-                    error_message += f"Falhou no caso teste {testcase}: ORDEM das operacoes não faz sentido"
-                    raise FailedTestcaseError(self.student, error_message)
-
-                if num_operations != answers["num_operations"]:
-                    error_message += f"Falhou no caso teste {testcase}: ORDEM NAO OTIMA"
-                else:
-                    error_message += f"Falhou no caso teste {testcase}: ORDEM CORRETA mas FORA DO PADRAO"
-                raise FailedTestcaseError(self.student, error_message)
-
+        wrong_values_error_message = ""
+        for value_name in wrong_values:
+            wrong_values_error_message += f"Caso teste {testcase}: {value_name.upper()} errado\n"
+        if wrong_values_error_message:
+            raise FailedTestcaseError(
+                self.student, 
+                wrong_values_error_message
+            )
+        
+        # Correct list of values the student printed on output
+        line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.line_regexes
+        student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.value_regexes)
+        # If student list is not right, raise error
+        if student_values != answers[self.json_field_with_array]:
+            raise FailedTestcaseError(
+                self.student,
+                f"Caso teste: {testcase}: ORDENACAO ERRADA"
+            )
 
     def detect_bronco(self, code):
         corrector_agent = CorrectorAgent()
