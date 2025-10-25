@@ -36,8 +36,7 @@ def convert_special_caracters(string):
     return string
 
 def make_regex_to_match_string(string):
-    escaped = re.escape(string)
-    return re.compile(escaped, re.IGNORECASE)
+    return re.escape(string)
 
 def get_lines_that_matches_any_regex(text_as_str_list, pattern_list, ignorecase=True, return_first_match_only=True):
     ignorecase_flag = re.IGNORECASE if ignorecase else 0

@@ -35,7 +35,7 @@ class DadosLab:
         args = parser.parse_args()
         argv = sys.argv
 
-        self.numero_lab = int(re.search(r'\d+', argv[0]).group())
+        self.numero_lab = int(re.search(r"\d+", argv[0]).group())
         self.lab_folder_path = f"./lab{self.numero_lab}"
 
         self.testcases_path = os.path.join(self.lab_folder_path, "testcases")
@@ -56,28 +56,28 @@ class DadosLab:
         # The field in "saida*.json" which contains the correct order of output
         self.json_field_with_array = "order"
 
-        # If you want to use values in json field array to quickly build a regex
-        self.use_json_to_get_line_patterns = True
-
-        # Or else directly set line patterns
-        self.line_regexes = []
-
-        self.value_regexes = [
-            r"^(.*\S).*$"
-        ]
-
-        # Dict to find int values on the output txt
-        # Keys need to be on the EXACT order
-        # To keep it simple, those will be used both to find valid lines and to extract the value from them
-        self.value_to_line_regexes = {
-            "num_comparacoes": [
-            r'\bcomparacoes\b',
-            r'\bcomparaçoes\b',
-            r'\bcomparacões\b',
-            r'\bcomparações\b',
-            r'\bfeitas\b'
+        self.array_regexes = {
+            "lines": [],
+            "values": [
+                r"^(.*\S).*$"
             ]
         }
 
-        self.value_to_value_regexes = self.value_to_line_regexes
+        # If you want to use values in json field array to quickly build a regex
+        # Which overwrites field lines of self.array_regexes
+        self.use_json_to_get_line_patterns = True
+
+        # Dict to find int values on the output txt
+        # Keys need to be on the EXACT order
+        self.value_to_regexes = {
+            "num_comparacoes": {
+                "lines": [
+                    r"\bcomparacoes\b",
+                    r"\bfeitas\b"
+                ],
+                "values": [
+                    r"-?\d+"
+                ]
+            }
+        }
 

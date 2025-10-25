@@ -53,10 +53,8 @@ class LabCorrector():
         self.student_folder_files = dados_lab.student_folder_files
         self.use_json_to_get_line_patterns = dados_lab.use_json_to_get_line_patterns
         self.json_field_with_array = dados_lab.json_field_with_array
-        self.line_regexes = dados_lab.line_regexes
-        self.value_regexes = dados_lab.value_regexes
-        self.value_to_line_regexes = dados_lab.value_to_line_regexes 
-        self.value_to_value_regexes = dados_lab.value_to_value_regexes            
+        self.array_regexes = dados_lab.array_regexes
+        self.value_to_regexes = dados_lab.value_to_regexes        
 
         # If only one student, correct using all criteria
         if self.student_to_correct:
@@ -167,7 +165,7 @@ class LabCorrector():
             with open(error_file_path, "a") as file:
                 file.write(student.name + "\n")
 
-    def get_and_handle_output(self, testcase):
+    def get_and_process_output(self, testcase):
         output_path = glob.glob(f'{self.student.path}/Lab*.txt')
         if not output_path:
             raise FailedTestcaseError(self.student, "Nao criou o arquivo txt de saida\n")
@@ -178,10 +176,12 @@ class LabCorrector():
         os.remove(output_path[0])
         try:
             with open(final_output_path, encoding='utf-8') as output_file:
-                return output_file.readlines()
+                lines = output_file.readlines()
         except UnicodeDecodeError:           
             with open(final_output_path, encoding='latin1') as output_file:
-                return output_file.readlines()
+                lines = output_file.readlines()
+        return [utils.convert_special_caracters(line) for line in lines]
+
         
     def get_student_code(self):
         cpp_path = glob.glob(f'{self.student.path}/Lab*.cpp')
@@ -251,7 +251,7 @@ class LabCorrector():
         
     def correct_output(self, testcase):
         self.run_student_code(testcase)
-        output = self.get_and_handle_output(testcase)
+        output = self.get_and_process_output(testcase)
         self.process_student_output(testcase, output)
 
     def process_student_output(self, testcase, output):    
@@ -273,13 +273,13 @@ class LabCorrector():
         
         # Correct all values the student should print on output
         wrong_values = []
-        for value_name in self.value_to_line_regexes:
-            student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_line_regexes[value_name], self.value_to_value_regexes[value_name])
+        for value_name in self.value_to_regexes:
+            student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_regexes[value_name]["lines"], self.value_to_regexes[value_name]["values"])
             # If can't find a value, raise error asap
             if student_value is None:
                 raise OutputFormattingError(self.student, f"Nao imprimiu {value_name.upper()}")
             # If value is diff from the answer, continue correction
-            if student_value != answers[value_name]:
+            if int(student_value) != answers[value_name]:
                 wrong_values.append(value_name)
             
         wrong_values_error_message = ""
@@ -292,8 +292,8 @@ class LabCorrector():
             )
         
         # Correct list of values the student printed on output
-        line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.line_regexes
-        student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.value_regexes)
+        line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.array_regexes["lines"]
+        student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.array_regexes["values"])
         # If student list is not right, raise error
         if student_values != answers[self.json_field_with_array]:
             raise FailedTestcaseError(
