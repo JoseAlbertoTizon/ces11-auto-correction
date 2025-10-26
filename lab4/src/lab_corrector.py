@@ -57,6 +57,7 @@ class LabCorrector():
         self.value_to_regexes = dados_lab.value_to_regexes   
         self.output_types = dados_lab.output_types     
         self.ai_correction_criteria = dados_lab.ai_correction_criteria
+        self.ai_correction_introduction_prompt = dados_lab.ai_correction_introduction_prompt
 
         # If only one student, correct using all criteria
         if self.student_to_correct:
@@ -353,34 +354,13 @@ class LabCorrector():
     def detect_bronco(self, code):
         corrector_agent = CorrectorAgent(self.ai_correction_criteria)
         
-        prompt = '''
-        **Sua função principal**: Você irá identificar no código do aluno processos que tornem o código repetitivo ou que realizam operações
-        desnecessárias. Por exemplo, dar malloc em cada posição de um vetor em vez de dar um único malloc no vetor inteiro, ou usar uma lógica
-        muito complexa para fazer algo simples. Seja leniente para coisas mais bobas, como fazer if else para retornar bool no lugar
-        de apenas retornar o bool diretamente, nâo identifique esse tipo de atitude. Também não identifique erros reais no código
-        que façam ele não funcionar corretamente, como erros de lógica, esses já foram identificados na correção automática. Sua
-        função não é achar o que está errado, mas o que está subótimo/repetitivo/feio porém funcional. Também identifique más
-        práticas de código, como variáveis não inicializadas que geram acesso indevido, e falta de fclose/free, ou erros no free
-        que gerem vazamento de memória. Repito, não identifique erros de lógica no código, apenas erros de práticas subótimas/erradas.
-        Não seja pedântico.
-        '''
-
-        final_instructions = f'''
-        **Formato da resposta**:  
-        - Escreva em bullet points (um item por linha).
-        - Se não houver nada a apontar em uma seção, escreva: “Nenhum problema identificado”.  
-
-        Ex:
-        Más práticas/repetições encontradas:
-        1) Problema 1
-        2) Problema 2
-
-        Segue o código do aluno:
-
-        {code}
-        '''
-
-        prompt = f"{prompt}\n\n{final_instructions}"
+        prompt = (
+            self.ai_correction_introduction_prompt
+            + "\n\nCritérios de correção:\n\n"
+            + self.ai_correction_criteria
+            + "\n\nCódigo do aluno:\n\n"
+            + code
+        )
 
         response = corrector_agent.respond(prompt)
         
