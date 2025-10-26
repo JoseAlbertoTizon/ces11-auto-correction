@@ -54,7 +54,8 @@ class LabCorrector():
         self.use_json_to_get_line_patterns = dados_lab.use_json_to_get_line_patterns
         self.json_field_with_array = dados_lab.json_field_with_array
         self.array_regexes = dados_lab.array_regexes
-        self.value_to_regexes = dados_lab.value_to_regexes        
+        self.value_to_regexes = dados_lab.value_to_regexes   
+        self.output_types = dados_lab.output_types     
 
         # If only one student, correct using all criteria
         if self.student_to_correct:
@@ -124,18 +125,27 @@ class LabCorrector():
             os.rename(file_path, os.path.join(self.students_path, new_filename))
 
         CPP_files = glob.glob(os.path.join(self.students_path, "Lab*.CPP"))
-        for file_path in CPP_files:
+        for file_path in CPP_files:     
             filename = os.path.basename(file_path)
             new_filename = filename.replace('.CPP', '.cpp')
             os.rename(file_path, os.path.join(self.students_path, new_filename))
 
         cpp_files = glob.glob(os.path.join(self.students_path, "Lab*.cpp"))
+        student_names = []
         for file_path in cpp_files:
-            filename = os.path.basename(file_path) 
-            folder_name = filename[5:].replace('.cpp','')
+            filename = os.path.basename(file_path)
+            folder_name = filename[5:].replace('.cpp', '')
+            student_names.append(folder_name)
             new_folder_path = os.path.join(self.students_path, folder_name)
             os.makedirs(new_folder_path, exist_ok=True)
-            shutil.move(file_path, os.path.join(new_folder_path, filename))  
+            shutil.move(file_path, os.path.join(new_folder_path, filename))
+
+            other_files = [
+                f for f in os.listdir(self.students_path)
+                if folder_name in f and not f.endswith('.cpp') and os.path.isfile(os.path.join(self.students_path, f))
+            ]
+            for other_file in other_files:
+                shutil.move(os.path.join(self.students_path, other_file), os.path.join(new_folder_path, other_file))
 
     def remove_outputs_folder(self):
         outputs_path = os.path.join(self.student.path, "outputs")
@@ -165,22 +175,53 @@ class LabCorrector():
             with open(error_file_path, "a") as file:
                 file.write(student.name + "\n")
 
-    def get_and_process_output(self, testcase):
-        output_path = glob.glob(f'{self.student.path}/Lab*.txt')
-        if not output_path:
-            raise FailedTestcaseError(self.student, "Nao criou o arquivo txt de saida\n")
+    def get_and_process_outputs(self, testcase):
+        output_paths = glob.glob(f'{self.student.path}/Lab*.txt')
         output_folder = os.path.join(self.student.path, 'outputs')
+        final_output_path = os.path.join(output_folder, f"{testcase}.txt")     
         os.makedirs(output_folder, exist_ok=True)
-        final_output_path = os.path.join(output_folder, f"{testcase}.txt")
-        shutil.copy(output_path[0], final_output_path)
-        os.remove(output_path[0])
-        try:
-            with open(final_output_path, encoding='utf-8') as output_file:
-                lines = output_file.readlines()
-        except UnicodeDecodeError:           
-            with open(final_output_path, encoding='latin1') as output_file:
-                lines = output_file.readlines()
-        return [utils.convert_special_caracters(line) for line in lines]
+        outputs = {}
+        for output_path in output_paths:
+            current_final_output_path = final_output_path
+            filename = os.path.basename(output_path)
+            output_type = None
+            for _type in self.output_types:
+                if _type in filename:
+                    output_type = _type
+                    inner_output_folder = os.path.join(output_folder, _type)
+                    os.makedirs(inner_output_folder, exist_ok=True)
+                    if self.output_types:
+                        current_final_output_path = os.path.join(inner_output_folder, f"{testcase}.txt")
+                    break
+
+            if output_type:
+                shutil.copy(output_path, current_final_output_path)
+
+            os.remove(output_path)
+                       
+            if not output_type:
+                continue
+
+            try:
+                with open(current_final_output_path, encoding='utf-8') as output_file:
+                    lines = output_file.readlines()
+            except UnicodeDecodeError:           
+                with open(current_final_output_path, encoding='latin1') as output_file:
+                    lines = output_file.readlines()
+            outputs[output_type] = [utils.convert_special_caracters(line) for line in lines]
+
+        missing_types = []
+        for _type in self.output_types:
+            if _type not in outputs:
+                missing_types.append(_type)
+        if missing_types:
+            missing_str = ", ".join(f"{t}.txt" for t in missing_types)
+            raise FailedTestcaseError(
+                self.student,
+                f"Nao criou os arquivos de saida: {missing_str}\n"
+            )
+            
+        return outputs
 
         
     def get_student_code(self):
@@ -251,55 +292,52 @@ class LabCorrector():
         
     def correct_output(self, testcase):
         self.run_student_code(testcase)
-        output = self.get_and_process_output(testcase)
-        self.process_student_output(testcase, output)
+        outputs = self.get_and_process_outputs(testcase)
+        self.process_student_outputs(testcase, outputs)
 
-    def process_student_output(self, testcase, output):    
-        lines = [line.rstrip('\n') for line in output] 
+    def process_student_outputs(self, testcase, outputs):  
+        all_errors = ""
 
-        if len(lines) < 2:
-            raise OutputFormattingError(
-                self.student,
-                f"Output vazio no caso teste {testcase}"
-            )
-        
-        # Get the correct answers and line matching patterns
-        answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
-        with open(answers_path, "r", encoding="utf-8") as answers_file:
-            answers = json.load(answers_file)
-            line_regexes_from_json = []
-            for string in answers[self.json_field_with_array]:
-                line_regexes_from_json.append(utils.make_regex_to_match_string(utils.convert_special_caracters(string)))
-        
-        # Correct all values the student should print on output
-        wrong_values = []
-        for value_name in self.value_to_regexes:
-            student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_regexes[value_name]["lines"], self.value_to_regexes[value_name]["values"])
-            # If can't find a value, raise error asap
-            if student_value is None:
-                raise OutputFormattingError(self.student, f"Nao imprimiu {value_name.upper()}")
-            # If value is diff from the answer, continue correction
-            if int(student_value) != answers[value_name]:
-                wrong_values.append(value_name)
+        for output in outputs:  
+            lines = [line.rstrip('\n') for line in output] 
+
+            if len(lines) < 2:
+                raise OutputFormattingError(
+                    self.student,
+                    f"Output vazio no caso teste {testcase}"
+                )
             
-        wrong_values_error_message = ""
-        for value_name in wrong_values:
-            wrong_values_error_message += f"Caso teste {testcase}: {value_name.upper()} errado\n"
-        if wrong_values_error_message:
-            raise FailedTestcaseError(
-                self.student, 
-                wrong_values_error_message
-            )
-        
-        # Correct list of values the student printed on output
-        line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.array_regexes["lines"]
-        student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.array_regexes["values"])
-        # If student list is not right, raise error
-        if student_values != answers[self.json_field_with_array]:
-            raise FailedTestcaseError(
-                self.student,
-                f"Caso teste: {testcase}: ORDENACAO ERRADA"
-            )
+            # Get the correct answers and line matching patterns
+            answers_path = os.path.join(self.testcases_path, testcase, f'saida{self.numero_lab}.json')
+            with open(answers_path, "r", encoding="utf-8") as answers_file:
+                answers = json.load(answers_file)
+                line_regexes_from_json = []
+                for string in answers[self.json_field_with_array]:
+                    line_regexes_from_json.append(utils.make_regex_to_match_string(utils.convert_special_caracters(string)))
+            
+            # Correct all values the student should print on output
+            wrong_values = []
+            for value_name in self.value_to_regexes:
+                student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_regexes[value_name]["lines"], self.value_to_regexes[value_name]["values"])
+                # If can't find a value, raise error asap
+                if student_value is None:
+                    raise OutputFormattingError(self.student, f"Nao imprimiu {value_name.upper()}")
+                # If value is diff from the answer, continue correction
+                if int(student_value) != answers[value_name]:
+                    wrong_values.append(value_name)
+                
+            for value_name in wrong_values:
+                all_errors += f"Caso teste {testcase}: {value_name.upper()} errado\n"
+            
+            # Correct list of values the student printed on output
+            line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.array_regexes["lines"]
+            student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.array_regexes["values"])
+            # If student list is not right, raise error
+            if student_values != answers[self.json_field_with_array]:
+                all_errors += f"Caso teste: {testcase}: ORDENACAO ERRADA\n"
+
+        if all_errors:
+            raise FailedTestcaseError(self.student, all_errors)
 
     def detect_bronco(self, code):
         corrector_agent = CorrectorAgent()

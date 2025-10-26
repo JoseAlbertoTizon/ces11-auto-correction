@@ -51,7 +51,7 @@ class DadosLab:
         # Increase this if a testcase takes long to run
         self.run_timeout = 5
 
-        self.student_folder_files = ["logs_correcao_auto.txt", "logs_correcao_bronco.txt", "outputs", ".cpp"]
+        self.student_folder_files = ["logs_correcao_auto.txt", "logs_correcao_bronco.txt", "outputs", ".cpp", ".txt", ".docx"]
 
         # The field in "saida*.json" which contains the correct order of output
         self.json_field_with_array = "order"
@@ -80,4 +80,8 @@ class DadosLab:
                 ]
             }
         }
+
+        # Leave empty if al outputs are of the format Labn_Seu_Nome.txt
+        # Add element "out_type" if they're of the format Labn_Seu_Nome_out_type.txt
+        self.output_types = ["bubble", "merge", "quick"]
 
