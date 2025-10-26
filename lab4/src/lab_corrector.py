@@ -206,7 +206,7 @@ class LabCorrector():
 
             if not self.output_types:
                 outputs["default"] = [utils.convert_special_caracters(line) for line in lines]
-                break
+                continue
 
             outputs[output_type] = [utils.convert_special_caracters(line) for line in lines]
         
