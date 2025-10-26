@@ -56,6 +56,7 @@ class LabCorrector():
         self.array_regexes = dados_lab.array_regexes
         self.value_to_regexes = dados_lab.value_to_regexes   
         self.output_types = dados_lab.output_types     
+        self.ai_correction_criteria = dados_lab.ai_correction_criteria
 
         # If only one student, correct using all criteria
         if self.student_to_correct:
@@ -190,25 +191,31 @@ class LabCorrector():
                     output_type = _type
                     inner_output_folder = os.path.join(output_folder, _type)
                     os.makedirs(inner_output_folder, exist_ok=True)
-                    if self.output_types:
-                        current_final_output_path = os.path.join(inner_output_folder, f"{testcase}.txt")
+                    current_final_output_path = os.path.join(inner_output_folder, f"{testcase}.txt")
                     break
 
-            if output_type:
+            if not self.output_types or output_type:
                 shutil.copy(output_path, current_final_output_path)
 
             os.remove(output_path)
                        
-            if not output_type:
+            if self.output_types and not output_type:
                 continue
 
-            try:
-                with open(current_final_output_path, encoding='utf-8') as output_file:
-                    lines = output_file.readlines()
-            except UnicodeDecodeError:           
-                with open(current_final_output_path, encoding='latin1') as output_file:
-                    lines = output_file.readlines()
+            lines = utils.read_file_lines(current_final_output_path)
+
+            if not self.output_types:
+                outputs["default"] = [utils.convert_special_caracters(line) for line in lines]
+                break
+
             outputs[output_type] = [utils.convert_special_caracters(line) for line in lines]
+        
+        if not self.output_types:
+            if "default" not in outputs:
+                raise FailedTestcaseError(
+                self.student,
+                f"Nao criou o arquivo de saida\n"
+            )
 
         missing_types = []
         for _type in self.output_types:
@@ -293,13 +300,14 @@ class LabCorrector():
     def correct_output(self, testcase):
         self.run_student_code(testcase)
         outputs = self.get_and_process_outputs(testcase)
-        self.process_student_outputs(testcase, outputs)
+        self.apply_output_correction_criteria(testcase, outputs)
 
-    def process_student_outputs(self, testcase, outputs):  
-        all_errors = ""
+    def apply_output_correction_criteria(self, testcase, outputs):  
+        failed_testcase_errors = ""
+        output_formatting_errors = ""
 
         for output in outputs:  
-            lines = [line.rstrip('\n') for line in output] 
+            lines = [line.rstrip('\n') for line in outputs[output]] 
 
             if len(lines) < 2:
                 raise OutputFormattingError(
@@ -321,26 +329,29 @@ class LabCorrector():
                 student_value = utils.get_first_match_in_first_matching_line(lines, self.value_to_regexes[value_name]["lines"], self.value_to_regexes[value_name]["values"])
                 # If can't find a value, raise error asap
                 if student_value is None:
-                    raise OutputFormattingError(self.student, f"Nao imprimiu {value_name.upper()}")
+                    output_formatting_errors += f"Caso teste: {testcase}: Nao imprimiu {value_name.upper()}\n"
                 # If value is diff from the answer, continue correction
-                if int(student_value) != answers[value_name]:
+                if student_value and int(student_value) != answers[value_name]:
                     wrong_values.append(value_name)
                 
             for value_name in wrong_values:
-                all_errors += f"Caso teste {testcase}: {value_name.upper()} errado\n"
+                failed_testcase_errors += f"Caso teste {testcase}: {value_name.upper()} errado\n"
             
             # Correct list of values the student printed on output
             line_regexes = line_regexes_from_json if self.use_json_to_get_line_patterns else self.array_regexes["lines"]
             student_values = utils.get_first_matches_in_many_matching_lines(lines, line_regexes, self.array_regexes["values"])
             # If student list is not right, raise error
             if student_values != answers[self.json_field_with_array]:
-                all_errors += f"Caso teste: {testcase}: ORDENACAO ERRADA\n"
+                failed_testcase_errors += f"Caso teste: {testcase}: ORDENACAO ERRADA\n"
 
-        if all_errors:
-            raise FailedTestcaseError(self.student, all_errors)
+        if output_formatting_errors:
+            raise OutputFormattingError(self.student, output_formatting_errors)
+
+        if failed_testcase_errors:
+            raise FailedTestcaseError(self.student, failed_testcase_errors)
 
     def detect_bronco(self, code):
-        corrector_agent = CorrectorAgent()
+        corrector_agent = CorrectorAgent(self.ai_correction_criteria)
         
         prompt = '''
         **Sua função principal**: Você irá identificar no código do aluno processos que tornem o código repetitivo ou que realizam operações

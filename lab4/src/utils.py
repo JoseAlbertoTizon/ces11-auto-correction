@@ -84,3 +84,11 @@ def get_first_matches_in_many_matching_lines(lines, line_pattern_list, value_pat
             values.append(match)
 
     return values
+
+def read_file_lines(path):
+    try:
+        with open(path, encoding='utf-8') as f:
+            return [convert_special_caracters(line) for line in f.readlines()]
+    except UnicodeDecodeError:
+        with open(path, encoding='latin1') as f:
+            return [convert_special_caracters(line) for line in f.readlines()]

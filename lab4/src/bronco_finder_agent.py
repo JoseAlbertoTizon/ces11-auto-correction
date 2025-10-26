@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 from google import genai
-from abc import ABC, abstractmethod
 
 load_dotenv()
 
@@ -11,6 +10,9 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 import time
 
 class CorrectorAgent:
+    def __init__(self, correction_criteria):
+        self.correction_criteria = correction_criteria
+
     def post_process(self, response_text):
         lines = response_text.splitlines()
         start_idx = next((i for i, line in enumerate(lines) if "{" in line), None)

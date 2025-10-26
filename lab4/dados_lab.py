@@ -70,18 +70,22 @@ class DadosLab:
         # Dict to find int values on the output txt
         # Keys need to be on the EXACT order
         self.value_to_regexes = {
-            "num_comparacoes": {
-                "lines": [
-                    r"\bcomparacoes\b",
-                    r"\bfeitas\b"
-                ],
-                "values": [
-                    r"-?\d+"
-                ]
-            }
+            # "num_comparacoes": {
+            #     "lines": [
+            #         r"\bcomparacoes\b",
+            #         r"\bfeitas\b"
+            #     ],
+            #     "values": [
+            #         r"-?\d+"
+            #     ]
+            # }
         }
 
         # Leave empty if al outputs are of the format Labn_Seu_Nome.txt
         # Add element "out_type" if they're of the format Labn_Seu_Nome_out_type.txt
         self.output_types = ["bubble", "merge", "quick"]
 
+        # Each element is an instruction for the ai agent
+        self.ai_correction_criteria = [
+
+        ]
